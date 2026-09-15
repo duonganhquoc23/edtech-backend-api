@@ -1,10 +1,11 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-app.use(cors());
-require('dotenv').config();
 const db = require('./db');
 
 const app = express();
+
+// Cấu hình CORS và JSON middleware
 app.use(cors());
 app.use(express.json());
 

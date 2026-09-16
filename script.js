@@ -1,41 +1,40 @@
 let userData = {};
-let currentLoginAvatar = '👦'; // Mặc định ở màn hình đăng nhập
+let currentLoginAvatar = '👦';
 
 function initData() {
-    let data = localStorage.getItem('edtech_user_kid');
-    
-    // Nếu chưa đăng nhập -> Hiển thị Popup Đăng nhập
-    if (!data) {
+    try {
+        let data = localStorage.getItem('edtech_user_kid');
+        if (!data) throw new Error("Chưa có dữ liệu");
+        
+        userData = JSON.parse(data);
+        // Kiểm tra chặt chẽ: Nếu mất Tên thì bắt đăng nhập lại, tránh lưu đè dữ liệu hỏng
+        if (!userData.name) throw new Error("Dữ liệu bị lỗi");
+        
+        document.getElementById('login-screen').style.display = 'none';
+        
+        if(!userData.id) userData.id = Date.now().toString();
+        if(!userData.level) userData.level = 1;
+        if(!userData.xp) userData.xp = 0;
+        if(!userData.unlocked) userData.unlocked = []; // Mảng chứa huy hiệu đã mở
+        
+        updateHeaderInfo();
+        renderProfile();
+        loadSelectedAvatar();
+        syncToAdmin(userData);
+        
+        if (window.location.hash) {
+            let targetId = window.location.hash.substring(1);
+            if (targetId === 'games') targetId = 'home';
+            if (document.getElementById(targetId)) navigate(targetId);
+        }
+    } catch(e) {
+        localStorage.removeItem('edtech_user_kid');
         document.getElementById('login-screen').style.display = 'flex';
-        return; 
-    } 
-    
-    // Nếu đã đăng nhập -> Ẩn Popup và nạp dữ liệu
-    document.getElementById('login-screen').style.display = 'none';
-    userData = JSON.parse(data);
-    
-    // Đảm bảo dữ liệu cũ không bị thiếu trường (để tránh lỗi CSDL)
-    if(!userData.id) userData.id = Date.now().toString();
-    if(!userData.level) userData.level = 1;
-    if(!userData.xp) userData.xp = 0;
-    
-    updateHeaderInfo();
-    renderProfile();
-    loadSelectedAvatar();
-    
-    // Tự động đồng bộ lên CSDL Admin
-    syncToAdmin(userData);
-    
-    if (window.location.hash) {
-        let targetId = window.location.hash.substring(1);
-        if (targetId === 'games') targetId = 'home';
-        if (document.getElementById(targetId)) navigate(targetId);
     }
 }
 
 window.onload = initData;
 
-// ================= PHẦN ĐĂNG NHẬP =================
 function selectLoginAvatar(avatar, btnElement) {
     currentLoginAvatar = avatar;
     const btns = document.querySelectorAll('#login-screen .avatar-btn');
@@ -52,34 +51,27 @@ function startGame() {
         return;
     }
 
-    // Chuẩn hóa đúng tên biến để gửi lên CSDL
     userData = {
         id: Date.now().toString(),
         name: nameInput,
         class_name: classInput,
         avatar: currentLoginAvatar,
         level: 1,
-        xp: 0
-    };
-    
-    // Lưu vào máy tính và ẩn Popup
+        xp: 0,
+        unlocked: []
+    };    
     localStorage.setItem('edtech_user_kid', JSON.stringify(userData));
     document.getElementById('login-screen').style.display = 'none';
     
-    // Cập nhật giao diện
     updateHeaderInfo();
     renderProfile();
     loadSelectedAvatar();
-    
-    // Bắn dữ liệu ngay lập tức lên CSDL Admin
     syncToAdmin(userData);
 }
 
-// ================= ĐỒNG BỘ LÊN ADMIN =================
 async function syncToAdmin(userObj) {
     try {
         localStorage.setItem('edtech_user_kid', JSON.stringify(userObj));
-        
         await fetch('https://edtech-backend-api-nv0x.onrender.com/api/sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -90,7 +82,6 @@ async function syncToAdmin(userObj) {
     }
 }
 
-// ================= CÁC HÀM XỬ LÝ KHÁC =================
 function selectAvatar(avatarEmoji, btnElement) {
     userData.avatar = avatarEmoji;
     localStorage.setItem('edtech_user_kid', JSON.stringify(userData));
@@ -132,6 +123,14 @@ function navigate(sectionId) {
     if (sectionId === 'profile') renderProfile();
 }
 
+// HỆ THỐNG THÀNH TÍCH (GAMIFICATION)
+const BADGES = [
+    { id: 'b1', name: 'Ngôi Sao Chăm Chỉ', req: 500, icon: 'fa-star', color: 'text-warning' },
+    { id: 'b2', name: 'Hiệp Sĩ An Toàn', req: 1000, icon: 'fa-shield-halved', color: 'text-success' },
+    { id: 'b3', name: 'Chuyên Gia Thiết Bị', req: 1500, icon: 'fa-medal', color: 'text-secondary' },
+    { id: 'b4', name: 'Quán Quân Tin Học', req: 2000, icon: 'fa-trophy', color: 'text-accent' }
+];
+
 function renderProfile() {
     document.getElementById('prof-name').innerText = userData.name || "Phi Hành Gia Nhí";
     document.getElementById('prof-class').innerText = userData.class_name || "Lớp 4";
@@ -139,9 +138,72 @@ function renderProfile() {
     document.getElementById('prof-xp').innerText = userData.xp || 0;
     document.getElementById('prof-avatar').innerText = userData.avatar || "👦";
     document.getElementById('prof-xp-bar').style.width = (((userData.xp || 0) % 500) / 500 * 100) + "%";
+    
+    // Render Huy hiệu
+    const container = document.getElementById('achievements-container');
+    if(!container) return;
+    container.innerHTML = '';
+    
+    if(!userData.unlocked) userData.unlocked = [];
+    
+    BADGES.forEach(b => {
+        let isUnlocked = userData.unlocked.includes(b.id);
+        let canUnlock = userData.xp >= b.req;
+        
+        let card = document.createElement('div');
+        card.className = `stat-card card ${isUnlocked ? '' : 'locked-badge'}`;
+        
+        let iconHtml = `<i class="fa-solid ${b.icon} ${isUnlocked ? b.color : ''}" style="font-size: 3rem; ${isUnlocked ? '' : 'color: #94a3b8;'}"></i>`;
+        let titleHtml = `<h3 style="font-family: 'Baloo 2', cursive; font-size: 1.4rem; margin-top: 10px;">${b.name}</h3>`;
+        
+        let btnHtml = '';
+        if(isUnlocked) {
+            btnHtml = `<span style="color: #10b981; font-weight: bold; margin-top:10px;"><i class="fa-solid fa-check-circle"></i> Đã mở khóa</span>`;
+        } else if(canUnlock) {
+            btnHtml = `<button class="btn btn-primary mt-2" onclick="unlockBadge('${b.id}', this)" style="padding: 5px 15px; font-size: 0.95rem;">MỞ KHÓA 🔓</button>`;
+        } else {
+            btnHtml = `<span style="color: #94a3b8; font-weight: bold; margin-top:10px;"><i class="fa-solid fa-lock"></i> Cần ${b.req} XP</span>`;
+        }
+        
+        card.innerHTML = iconHtml + titleHtml + btnHtml;
+        container.appendChild(card);
+    });
+}
+
+function unlockBadge(badgeId, btnElement) {
+    userData.unlocked.push(badgeId);
+    localStorage.setItem('edtech_user_kid', JSON.stringify(userData));
+    syncToAdmin(userData);
+    
+    // Tạo hiệu ứng pháo hoa chúc mừng
+    let rect = btnElement.getBoundingClientRect();
+    createConfetti(rect.left + rect.width / 2, rect.top);
+    
+    // Render lại sau khi hiệu ứng nổ
+    setTimeout(() => { renderProfile(); }, 800);
+}
+
+// HIỆU ỨNG PHÁO HOA TUNG TÓE
+function createConfetti(x, y) {
+    const colors = ['#facc15', '#34d399', '#f43f5e', '#60a5fa', '#a855f7'];
+    for(let i=0; i<30; i++) {
+        let conf = document.createElement('div');
+        conf.className = 'confetti';
+        conf.style.left = x + 'px';
+        conf.style.top = y + 'px';
+        conf.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+        document.body.appendChild(conf);
+        
+        let angle = Math.random() * Math.PI * 2;
+        let dist = Math.random() * 150 + 50;
+        conf.style.setProperty('--tx', Math.cos(angle) * dist + 'px');
+        conf.style.setProperty('--ty', (Math.sin(angle) * dist + 100) + 'px'); 
+        
+        setTimeout(() => conf.remove(), 1000);
+    }
 }
 
 function resetData() {
     localStorage.removeItem('edtech_user_kid');
-    window.location.reload(); // Đã sửa: Xóa xong tải lại trang để hiện form đăng nhập
+    window.location.reload(); 
 }

@@ -5,44 +5,10 @@ const db = require('./db');
 
 const app = express();
 
-// Cấu hình CORS và JSON middleware
 app.use(cors());
 app.use(express.json());
 
-// API Nhận dữ liệu từ Người chơi lưu vào MySQL
-// API Nhận dữ liệu từ Người chơi lưu vào MySQL
-app.post('/api/sync', async (req, res) => {
-    // Mình không lấy 'id' từ req.body nữa
-    const { name, class_name, avatar, level, xp } = req.body;
-    try {
-        // Bỏ cột id đi, để MySQL tự sinh số thứ tự tự động
-        const query = `
-            INSERT INTO users (name, class_name, avatar, level, xp) 
-            VALUES (?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE 
-            class_name = VALUES(class_name), 
-            avatar = VALUES(avatar), level = VALUES(level), xp = VALUES(xp)
-        `;
-        // Truyền đủ 5 biến (bỏ biến id)
-        await db.query(query, [name, class_name, avatar, level, xp]);
-        res.status(200).json({ message: 'Đồng bộ thành công' });
-    } catch (error) {
-        console.error("Lỗi đồng bộ:", error);
-        res.status(500).json({ error: error.message });
-    }
-});
-// API Trả dữ liệu cho Admin hiển thị
-app.get('/api/leaderboard', async (req, res) => {
-    try {
-        const [rows] = await db.query("SELECT * FROM users ORDER BY xp DESC");
-        res.status(200).json(rows);
-    } catch (error) {
-        console.error("Lỗi lấy dữ liệu:", error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// API tạm thời để tạo bảng CSDL (chỉ cần chạy 1 lần)
+// API 1: Tạo bảng CSDL (Chỉ chạy 1 lần lúc setup)
 app.get('/api/setup', async (req, res) => {
     try {
         const createTableQuery = `
@@ -57,12 +23,66 @@ app.get('/api/setup', async (req, res) => {
             )
         `;
         await db.query(createTableQuery);
-        res.status(200).send("🎉 TUYỆT VỜI! Đã tạo bảng users thành công. Hãy quay lại trang Admin và ấn F5 nhé!");
+        res.status(200).send("🎉 TUYỆT VỜI! Đã tạo bảng users thành công.");
     } catch (error) {
-        console.error("Lỗi tạo bảng:", error);
         res.status(500).send("Lỗi tạo bảng: " + error.message);
     }
 });
 
+// API 2: Nhận dữ liệu từ Người chơi lưu vào MySQL (ĐÃ FIX LỖI ID TỰ TĂNG)
+app.post('/api/sync', async (req, res) => {
+    const { name, class_name, avatar, level, xp } = req.body;
+    try {
+        const query = `
+            INSERT INTO users (name, class_name, avatar, level, xp) 
+            VALUES (?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE 
+            class_name = VALUES(class_name), 
+            avatar = VALUES(avatar), level = VALUES(level), xp = VALUES(xp)
+        `;
+        await db.query(query, [name, class_name, avatar, level, xp]);
+        res.status(200).json({ message: 'Đồng bộ thành công' });
+    } catch (error) {
+        console.error("Lỗi đồng bộ:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// API 3: Trả dữ liệu cho Admin hiển thị
+app.get('/api/leaderboard', async (req, res) => {
+    try {
+        const [rows] = await db.query("SELECT * FROM users ORDER BY xp DESC");
+        res.status(200).json(rows);
+    } catch (error) {
+        console.error("Lỗi lấy dữ liệu:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// API 4: Xóa 1 học sinh theo ID
+app.delete('/api/student/:id', async (req, res) => {
+    try {
+        await db.query("DELETE FROM users WHERE id = ?", [req.params.id]);
+        res.status(200).json({ message: 'Đã xóa học sinh' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// API 5: Xóa toàn bộ học sinh hoặc xóa theo Lớp
+app.delete('/api/students', async (req, res) => {
+    try {
+        const className = req.query.class_name;
+        if (className) {
+            await db.query("DELETE FROM users WHERE class_name = ?", [className]);
+        } else {
+            await db.query("DELETE FROM users");
+        }
+        res.status(200).json({ message: 'Đã xóa dữ liệu' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Server API đang chạy tại http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Server API đang chạy tại cổng ${PORT}`));

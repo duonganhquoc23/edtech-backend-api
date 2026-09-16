@@ -39,5 +39,27 @@ app.get('/api/leaderboard', async (req, res) => {
     }
 });
 
+// API tạm thời để tạo bảng CSDL (chỉ cần chạy 1 lần)
+app.get('/api/setup', async (req, res) => {
+    try {
+        const createTableQuery = `
+            CREATE TABLE IF NOT EXISTS users (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL UNIQUE,
+                class_name VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+                avatar VARCHAR(255),
+                level INT DEFAULT 1,
+                xp INT DEFAULT 0,
+                last_played TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+        `;
+        await db.query(createTableQuery);
+        res.status(200).send("🎉 TUYỆT VỜI! Đã tạo bảng users thành công. Hãy quay lại trang Admin và ấn F5 nhé!");
+    } catch (error) {
+        console.error("Lỗi tạo bảng:", error);
+        res.status(500).send("Lỗi tạo bảng: " + error.message);
+    }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Server API đang chạy tại http://localhost:${PORT}`));

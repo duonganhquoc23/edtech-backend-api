@@ -10,24 +10,27 @@ app.use(cors());
 app.use(express.json());
 
 // API Nhận dữ liệu từ Người chơi lưu vào MySQL
+// API Nhận dữ liệu từ Người chơi lưu vào MySQL
 app.post('/api/sync', async (req, res) => {
-    const { id, name, class_name, avatar, level, xp } = req.body;
+    // Mình không lấy 'id' từ req.body nữa
+    const { name, class_name, avatar, level, xp } = req.body;
     try {
+        // Bỏ cột id đi, để MySQL tự sinh số thứ tự tự động
         const query = `
-            INSERT INTO users (id, name, class_name, avatar, level, xp) 
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO users (name, class_name, avatar, level, xp) 
+            VALUES (?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE 
-            name = VALUES(name), class_name = VALUES(class_name), 
+            class_name = VALUES(class_name), 
             avatar = VALUES(avatar), level = VALUES(level), xp = VALUES(xp)
         `;
-        await db.query(query, [id || null, name, class_name, avatar, level, xp]);
+        // Truyền đủ 5 biến (bỏ biến id)
+        await db.query(query, [name, class_name, avatar, level, xp]);
         res.status(200).json({ message: 'Đồng bộ thành công' });
     } catch (error) {
         console.error("Lỗi đồng bộ:", error);
         res.status(500).json({ error: error.message });
     }
 });
-
 // API Trả dữ liệu cho Admin hiển thị
 app.get('/api/leaderboard', async (req, res) => {
     try {
